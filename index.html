@@ -257,7 +257,7 @@
       <input id="f-date" type="text" placeholder="לדוגמה: שישי הקרוב, 12:00">
     </div>
     <div class="field">
-      <label for="f-email">אימייל (לא חובה — לקבלת העתק של ההזמנה)</label>
+      <label for="f-email">אימייל (לא חובה — כדי שנוכל להשיב אליכם)</label>
       <input id="f-email" type="email" autocomplete="email" placeholder="example@mail.com">
     </div>
     <div class="field">
@@ -279,14 +279,12 @@
     <div class="check">✓</div>
     <h3>ההזמנה נשלחה בהצלחה!</h3>
     <p id="modal-copy-line" style="display:none;"></p>
-    <p class="hint">שימו לב: נפתחה אצלכם עכשיו תוכנת מייל עם ההזמנה מוכנה — צריך ללחוץ בה על "שלח" כדי שההזמנה תגיע בפועל. אם לא נפתח כלום, אפשר לפתוח את זה מהדפדפן הרגיל (לא מתוך תצוגה מקדימה) או לוודא שיש אפליקציית מייל מוגדרת במכשיר.</p>
+    <p class="hint">ההזמנה נשלחה אלינו ישירות. ניצור איתכם קשר בהקדם לאישור הפרטים והתשלום.</p>
     <button type="button" id="modal-close-btn">סגירה</button>
   </div>
 </div>
 
 <script>
-  const ORDER_EMAIL = "mmr5710@gmail.com";
-
   const DATA = {
     "items-trays": [
       {n:"מגש כריכונים מגוון (24 יח')", p:150},
@@ -459,7 +457,9 @@
     });
   }
 
-  document.getElementById("send-btn").addEventListener("click", () => {
+  const FORMSPREE_ENDPOINT = "https://formspree.io/f/xdeknpwp";
+
+  document.getElementById("send-btn").addEventListener("click", async () => {
     const name = document.getElementById("f-name").value.trim();
     const phone = document.getElementById("f-phone").value.trim();
     const date = document.getElementById("f-date").value.trim();
@@ -467,6 +467,7 @@
     const notes = document.getElementById("f-notes").value.trim();
     const chosen = lineItems.filter(e => e.qty > 0);
     const msg = document.getElementById("msg");
+    const btn = document.getElementById("send-btn");
 
     if(chosen.length === 0 || !name || !phone){
       msg.textContent = "בחרו כמות של לפחות פריט אחד, ומלאו שם וטלפון לפני השליחה.";
@@ -483,33 +484,45 @@
       return "- " + e.label + " x" + e.qty + " — ₪" + lineTotal;
     });
 
-    const bodyParts = [
-      "הזמנה חדשה ממגשפע",
-      "",
-      "שם: " + name,
-      "טלפון: " + phone,
-    ];
-    if(date) bodyParts.push("תאריך/שעה רצויים: " + date);
-    bodyParts.push("", "פריטים:", ...lines, "", "סה\"כ משוער: ₪" + total);
-    if(notes) bodyParts.push("", "הערות: " + notes);
-
-    const subject = "הזמנה חדשה - " + name;
-    const body = bodyParts.join("\n");
-    let mailto = "mailto:" + ORDER_EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-    if(email) mailto += "&cc=" + encodeURIComponent(email);
-
+    const itemsText = lines.join("\n");
     msg.classList.remove("show");
 
-    window.location.href = mailto;
+    const payload = {
+      "שם": name,
+      "טלפון": phone,
+      "תאריך/שעה רצויים": date || "-",
+      "פריטים": itemsText,
+      "סה\"כ משוער": "₪" + total,
+      "הערות": notes || "-",
+      "_subject": "הזמנה חדשה - " + name,
+    };
+    if(email) payload["_replyto"] = email;
 
-    const copyLine = document.getElementById("modal-copy-line");
-    if(email){
-      copyLine.textContent = "עותק של ההזמנה יישלח גם לכתובת " + email + ".";
-      copyLine.style.display = "block";
-    } else {
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "שולח...";
+
+    try{
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        body: JSON.stringify(payload),
+      });
+
+      if(!res.ok) throw new Error("send-failed");
+
+      const copyLine = document.getElementById("modal-copy-line");
       copyLine.style.display = "none";
+      document.getElementById("success-modal").classList.add("show");
+    } catch(err){
+      msg.textContent = "השליחה נכשלה. נסו שוב, או התקשרו/שלחו הודעה ישירות במספר 052-396-3156.";
+      msg.classList.remove("success");
+      msg.classList.add("show");
+      window.scrollTo({top:0, behavior:"smooth"});
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
     }
-    document.getElementById("success-modal").classList.add("show");
   });
 
   document.getElementById("modal-close-btn").addEventListener("click", () => {
